@@ -17,10 +17,24 @@ func main() {
 		http.StripPrefix("/template/",
 			http.FileServer(http.Dir("./template"))))
 
-	http.HandleFunc("/", loginHandler)
+	http.HandleFunc("/", redirectionHanderLogin)
+	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/main", mainHandler)
 
 	logger.PrintINFO("Сервис запущен на: localhost:8080")
 	http.ListenAndServe(service.GetConfig().Port, nil)
+}
+
+func redirectionHanderLogin(w http.ResponseWriter, r *http.Request) {
+	if service.GetConfig().AuthEnabled {
+		http.Redirect(w, r, "login", http.StatusFound)
+	} else {
+		http.Redirect(w, r, "main", http.StatusFound)
+	}
+}
+
+func mainHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Main handler"))
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
