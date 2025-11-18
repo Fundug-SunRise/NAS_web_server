@@ -1,0 +1,8 @@
+{
+  "login": "admin",
+  "password": "admin",
+  "port": ":8080",
+  "storage_path": "./storage",
+  "allowed_extensions": [".txt", ".pdf", ".jpg", ".png", ".mp4", ".mp3", ".doc", ".docx", ".xls", ".xlsx"],
+  "auth_enabled": true
+}
