@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	logger service.Logger
+	logger   service.Logger
+	AuthUser bool = false
 )
 
 func main() {
@@ -26,10 +27,14 @@ func main() {
 }
 
 func redirectionHanderLogin(w http.ResponseWriter, r *http.Request) {
-	if service.GetConfig().AuthEnabled {
-		http.Redirect(w, r, "login", http.StatusFound)
-	} else {
+	if !service.GetConfig().AuthEnabled || AuthUser {
+
 		http.Redirect(w, r, "main", http.StatusFound)
+		logger.PrintINFO("Переадресация на /main")
+	} else {
+
+		http.Redirect(w, r, "login", http.StatusFound)
+		logger.PrintINFO("Переадресация на /login")
 	}
 }
 
@@ -39,6 +44,29 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, getTemplate(w, "login"))
+
+	if r.Method != "POST" {
+		logger.PrintFATAL("LoginHandler Метод не поддерживается")
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Ошибка parsing формы", http.StatusBadRequest)
+		logger.PrintFATAL("Ошибка parsing формы: 400")
+		return
+	}
+
+	AuthUser = checkUser(r.FormValue("username"), r.FormValue("password"))
+
+	if AuthUser {
+		http.Redirect(w, r, "main", http.StatusFound)
+		logger.PrintINFO("Переадресация на /main")
+	}
+
+}
+
+func checkUser(username, password string) bool {
+	return username == service.GetConfig().Login && password == service.GetConfig().Password
 }
 
 func renderTemplate(w http.ResponseWriter, tmpl *template.Template) {
