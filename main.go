@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"html/template"
 	"nasweb/service"
 	"net/http"
@@ -9,14 +11,13 @@ import (
 
 var (
 	logger   service.Logger
-	AuthUser bool = false
+	sessions []string
 )
 
 func main() {
-
-	http.Handle("/template/",
-		http.StripPrefix("/template/",
-			http.FileServer(http.Dir("./template"))))
+	http.Handle("/static/",
+		http.StripPrefix("/static/",
+			http.FileServer(http.Dir("./static"))))
 
 	http.HandleFunc("/", redirectionHanderLogin)
 	http.HandleFunc("/login", loginHandler)
@@ -27,7 +28,7 @@ func main() {
 }
 
 func redirectionHanderLogin(w http.ResponseWriter, r *http.Request) {
-	if !service.GetConfig().AuthEnabled || AuthUser {
+	if !service.GetConfig().AuthEnabled || checkSessionCookie(r, "session") {
 
 		http.Redirect(w, r, "/main", http.StatusFound)
 		logger.PrintINFO("Переадресация на /main")
@@ -47,21 +48,29 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Ошибка parsing формы", http.StatusBadRequest)
-			logger.PrintFATAL("Ошибка parsing формы: 400")
-			return
-		}
-
-		AuthUser = checkUser(r.FormValue("username"), r.FormValue("password"))
+		AuthUser := checkUser(r.FormValue("username"), r.FormValue("password"))
 
 		if AuthUser {
+
+			if !checkSessionCookie(r, "session") {
+				sessionsID, _ := generateSessionID()
+				sessions = append(sessions, sessionsID)
+
+				cookie := &http.Cookie{
+					Name:     "session",
+					Value:    sessionsID,
+					Path:     "/login",
+					HttpOnly: true,
+				}
+
+				http.SetCookie(w, cookie)
+			}
+
 			logger.PrintINFO("Переадресация на /main")
 			http.Redirect(w, r, "/main", http.StatusFound)
-			return
 		} else {
 			logger.PrintINFO("Неудачная попытка входа")
-			renderTemplate(w, getTemplate(w, "login"))
+			http.Redirect(w, r, "/login?error=auth_failed", http.StatusSeeOther)
 		}
 
 	case "GET":
@@ -70,6 +79,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		logger.PrintFATAL("LoginHandler Метод не поддерживается")
 	}
 }
+
+//Функции надо будет кудато вынести ибо они мне не встрались тут
 
 func checkUser(username, password string) bool {
 	return username == service.GetConfig().Login && password == service.GetConfig().Password
@@ -84,7 +95,7 @@ func renderTemplate(w http.ResponseWriter, tmpl *template.Template) {
 
 func getTemplate(w http.ResponseWriter, name string) *template.Template {
 
-	templatePath := path.Join("template", name, "index.html")
+	templatePath := path.Join("static", name+".html")
 	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -92,4 +103,25 @@ func getTemplate(w http.ResponseWriter, name string) *template.Template {
 	}
 
 	return tmpl
+}
+
+func generateSessionID() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func checkSessionCookie(r *http.Request, name string) bool {
+	cookie, err := r.Cookie(name)
+	if err != nil {
+		return false
+	}
+	for _, sess := range sessions {
+		if sess == cookie.Value {
+			return true
+		}
+	}
+	return false
 }
