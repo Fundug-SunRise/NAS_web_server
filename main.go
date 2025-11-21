@@ -29,11 +29,11 @@ func main() {
 func redirectionHanderLogin(w http.ResponseWriter, r *http.Request) {
 	if !service.GetConfig().AuthEnabled || AuthUser {
 
-		http.Redirect(w, r, "main", http.StatusFound)
+		http.Redirect(w, r, "/main", http.StatusFound)
 		logger.PrintINFO("Переадресация на /main")
 	} else {
 
-		http.Redirect(w, r, "login", http.StatusFound)
+		http.Redirect(w, r, "/login", http.StatusFound)
 		logger.PrintINFO("Переадресация на /login")
 	}
 }
@@ -43,26 +43,32 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, getTemplate(w, "login"))
 
-	if r.Method != "POST" {
+	switch r.Method {
+	case "POST":
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Ошибка parsing формы", http.StatusBadRequest)
+			logger.PrintFATAL("Ошибка parsing формы: 400")
+			return
+		}
+
+		AuthUser = checkUser(r.FormValue("username"), r.FormValue("password"))
+
+		if AuthUser {
+			logger.PrintINFO("Переадресация на /main")
+			http.Redirect(w, r, "/main", http.StatusFound)
+			return
+		} else {
+			logger.PrintINFO("Неудачная попытка входа")
+			renderTemplate(w, getTemplate(w, "login"))
+		}
+
+	case "GET":
+		renderTemplate(w, getTemplate(w, "login"))
+	default:
 		logger.PrintFATAL("LoginHandler Метод не поддерживается")
-		return
 	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ошибка parsing формы", http.StatusBadRequest)
-		logger.PrintFATAL("Ошибка parsing формы: 400")
-		return
-	}
-
-	AuthUser = checkUser(r.FormValue("username"), r.FormValue("password"))
-
-	if AuthUser {
-		http.Redirect(w, r, "main", http.StatusFound)
-		logger.PrintINFO("Переадресация на /main")
-	}
-
 }
 
 func checkUser(username, password string) bool {
